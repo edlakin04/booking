@@ -373,10 +373,10 @@ function openTrialModal(){
     primaryText: "Continue",
     onPrimary: (close) => {
       const ns = loadState();
-        ns.auth.trialAccepted = true;
-        saveState(ns);
-        close();
-        render();
+      ns.auth.trialAccepted = true;
+      saveState(ns);
+      close();
+      render();
     }
   });
 }
@@ -1607,7 +1607,15 @@ function renderPublicPage(st){
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const selectedDayISO = publicUI.selectedDayISO || toISODate(days[0]);
-  const selectedServiceId = publicUI.selectedServiceId || (st.editor.services[0]?.id || "");
+
+  // ✅ FIX (silent, original behavior): if stored service id doesn't exist, fall back to first service
+  let selectedServiceId = publicUI.selectedServiceId || (st.editor.services[0]?.id || "");
+  if (st.editor.services.length > 0 && !st.editor.services.some(s => s.id === selectedServiceId)) {
+    selectedServiceId = st.editor.services[0].id;
+    publicUI.selectedServiceId = selectedServiceId;
+    localStorage.setItem(pubUIKey, JSON.stringify(publicUI));
+  }
+
   const selectedTime = publicUI.selectedTime || "";
 
   const selectedService = st.editor.services.find(s => s.id === selectedServiceId) || st.editor.services[0];
@@ -1891,8 +1899,13 @@ function renderPublicPage(st){
   // Booking requires login
   document.getElementById("publicBookBtn").onclick = () => {
     const ns = loadState();
-    const service = ns.editor.services.find(s => s.id === selectedServiceId);
-    if (!service) return;
+
+    // ✅ FIX: don't silently fail. Use selected service, or fall back to first one.
+    const service = ns.editor.services.find(s => s.id === selectedServiceId) || ns.editor.services[0];
+    if (!service) {
+      // no services at all -> nothing to book
+      return toast("No services", "This booking page has no services yet.");
+    }
 
     if (!publicAuth.user) {
       openPublicAuthModal({ slug, mode: "signup", after: "book" });
@@ -1935,9 +1948,7 @@ function renderPublicPage(st){
   };
 }
 
-/* ---------- Public auth / checkout / review / public chat (unchanged) ---------- */
-/* (your existing implementations below – kept exactly as in your file) */
-
+/* ---------- Public auth / checkout / review / public chat ---------- */
 function openPublicAuthModal({ slug, mode="login", after=null }){
   const pubAuthKey = `booking_public_auth_v3_${slug}`;
   const existing = safeJSONParse(localStorage.getItem(pubAuthKey) || "{}", { user:null });
