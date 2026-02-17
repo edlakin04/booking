@@ -1,87 +1,29 @@
-/* Booking.prototype — “works like it works”, no real backend.
-   Everything stored in sessionStorage (cache per session).
+/* Booking.prototype — front-end workflow simulation.
+   IMPORTANT: Uses localStorage so the public page works in a new tab.
 */
 
 const appRoot = document.getElementById("appRoot");
 const modalOverlay = document.getElementById("modalOverlay");
 const toastHost = document.getElementById("toastHost");
 
-const STORAGE_KEY = "booking_prototype_state_v1";
+const STORAGE_KEY = "booking_app_state_v2"; // new key for your updated build
 
-function nowISO() {
-  return new Date().toISOString();
-}
+function nowISO() { return new Date().toISOString(); }
 
 function safeJSONParse(v, fallback) {
   try { return JSON.parse(v); } catch { return fallback; }
 }
 
 function loadState() {
-  const raw = sessionStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) return safeJSONParse(raw, defaultState());
-
-  // bootstrap with defaults
   const st = defaultState();
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(st));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(st));
   return st;
 }
 
 function saveState(st) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(st));
-}
-
-function defaultState() {
-  return {
-    auth: {
-      trialAccepted: false,
-      signedIn: false,
-      userEmail: ""
-    },
-    onboarding: {
-      step: 0
-    },
-    editor: {
-      pageTitle: "Bookings by Studio Nova",
-      pageDescription: "Book an appointment in seconds. Pick a service, choose a time, and you’ll get a confirmation.",
-      brandColor: "#111827",
-      accentColor: "#2563eb",
-      services: [
-        { id: uid("svc"), name: "Consultation", durationMins: 30, price: 0, paywalled: false },
-        { id: uid("svc"), name: "Standard Session", durationMins: 60, price: 49.99, paywalled: true },
-        { id: uid("svc"), name: "Premium Session", durationMins: 90, price: 89.99, paywalled: true },
-      ],
-      published: false,
-      publicSlug: ""
-    },
-    bookings: {
-      // availability / rules
-      workingHours: { start: "09:00", end: "17:00", intervalMins: 30 },
-      daysOff: [
-        // { date: "2026-02-20", reason: "Holiday" }
-      ],
-      notifyByEmail: true,
-      notifyByText: false,
-
-      // customer bookings
-      items: [
-        // { id, serviceId, serviceName, dateISO, time, customerName, customerEmail, paid, status }
-      ]
-    },
-    finance: {
-      refunds: [
-        // { id, bookingId, customerEmail, amount, createdAt }
-      ]
-    },
-    reviews: [
-      // { id, customerName, rating, text, createdAt, serviceName }
-    ],
-    chats: [
-      // { id, customerName, customerEmail, messages: [{from:'customer'|'owner', text, at}]}
-    ],
-    ui: {
-      activeTab: "pageEditor"
-    }
-  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(st));
 }
 
 function uid(prefix = "id") {
@@ -113,7 +55,7 @@ function toast(title, body) {
   setTimeout(() => el.remove(), 3100);
 }
 
-function openModal({ title, description, bodyHTML, primaryText, onPrimary, secondaryText, onSecondary }) {
+function openModal({ title, description, bodyHTML, primaryText, onPrimary, secondaryText, onSecondary, tertiary }) {
   modalOverlay.classList.remove("hidden");
   modalOverlay.innerHTML = `
     <div class="modal">
@@ -127,6 +69,7 @@ function openModal({ title, description, bodyHTML, primaryText, onPrimary, secon
       <div class="modal-body">${bodyHTML || ""}</div>
       <div class="modal-foot">
         ${secondaryText ? `<button class="btn" id="modalSecondaryBtn">${h(secondaryText)}</button>` : ""}
+        ${tertiary ? `<button class="btn btn-applepay" id="modalTertiaryBtn">${h(tertiary.text)}</button>` : ""}
         ${primaryText ? `<button class="btn btn-primary" id="modalPrimaryBtn">${h(primaryText)}</button>` : ""}
       </div>
     </div>
@@ -147,19 +90,142 @@ function openModal({ title, description, bodyHTML, primaryText, onPrimary, secon
 
   const pri = document.getElementById("modalPrimaryBtn");
   if (pri) pri.onclick = () => onPrimary ? onPrimary(close) : close();
+
+  const ter = document.getElementById("modalTertiaryBtn");
+  if (ter && tertiary?.onClick) ter.onclick = () => tertiary.onClick(close);
 }
 
-function qs() {
-  return new URLSearchParams(window.location.search);
-}
+function qs() { return new URLSearchParams(window.location.search); }
+function isPublicView() { return qs().get("public") === "1"; }
+function getPublicSlugFromURL() { return qs().get("slug") || ""; }
 
-function isPublicView() {
-  // public booking page is served from same static file via query params
-  return qs().get("public") === "1";
-}
+/* ---------- STATE ---------- */
+function defaultState() {
+  const today = new Date();
+  const isoToday = toISODate(today);
+  const isoYesterday = toISODate(addDays(today, -1));
 
-function getPublicSlugFromURL() {
-  return qs().get("slug") || "";
+  return {
+    auth: {
+      trialAccepted: false,
+      signedIn: false,
+      userEmail: ""
+    },
+    editor: {
+      pageTitle: "Bookings by Studio Nova",
+      pageDescription: "Choose a service, pick a time, and get a confirmation instantly.",
+      brandColor: "#111827",
+      accentColor: "#2563eb",
+      services: [],                 // START EMPTY (your request)
+      published: false,
+      created: false,
+      publicSlug: ""
+    },
+    bookings: {
+      workingHours: { start: "09:00", end: "17:00", intervalMins: 30 },
+      daysOffRanges: [
+        // { id, startDate: "2026-02-01", endDate:"2026-02-22", reason:"Holiday" }
+      ],
+      notifyByEmail: true,
+      notifyByText: false,
+      items: [
+        // demo bookings (kept minimal; more gets created via public page)
+        {
+          id: uid("bk"),
+          serviceId: "demo",
+          serviceName: "Standard Session",
+          durationMins: 60,
+          price: 49.99,
+          dateISO: isoToday,
+          time: "10:00",
+          customerName: "Jamie Parker",
+          customerEmail: "jamie@example.com",
+          paid: true,
+          paidAmount: 49.99,
+          refunded: false,
+          status: "confirmed",
+          createdAt: nowISO()
+        },
+        {
+          id: uid("bk"),
+          serviceId: "demo2",
+          serviceName: "Consultation",
+          durationMins: 30,
+          price: 0,
+          dateISO: isoYesterday,
+          time: "14:30",
+          customerName: "Sam Green",
+          customerEmail: "sam@example.com",
+          paid: false,
+          paidAmount: 0,
+          refunded: false,
+          status: "confirmed",
+          createdAt: nowISO()
+        }
+      ]
+    },
+    finance: {
+      stripeConnected: false,
+      stripeAccountName: "",
+      refunds: [
+        { id: uid("rf"), bookingId: "demo-ref", customerEmail: "refund@example.com", amount: 25.00, createdAt: nowISO() }
+      ]
+    },
+    reviews: [
+      { id: uid("rev"), customerName: "Taylor", rating: 5, text: "Really smooth booking flow and clear times.", createdAt: nowISO(), serviceName: "Standard Session" },
+      { id: uid("rev"), customerName: "Morgan", rating: 4, text: "Easy to book. Would love more evening slots.", createdAt: nowISO(), serviceName: "Consultation" },
+      { id: uid("rev"), customerName: "Riley", rating: 5, text: "Great service and quick confirmation.", createdAt: nowISO(), serviceName: "Premium Session" }
+    ],
+    chats: [
+      {
+        id: "welcome",
+        locked: true,
+        customerName: "Welcome",
+        customerEmail: "",
+        createdAt: nowISO(),
+        subject: "How messaging works",
+        messages: [
+          {
+            from: "system",
+            text:
+`This inbox is where customer messages appear.
+
+• Customers can message you from your booking page.
+• Clicking a thread opens the conversation.
+• You can reply to customer threads (not this welcome message).
+• Everything updates instantly in this session.`,
+            at: nowISO()
+          }
+        ]
+      },
+      {
+        id: uid("chat"),
+        locked: false,
+        customerName: "Jamie Parker",
+        customerEmail: "jamie@example.com",
+        createdAt: nowISO(),
+        subject: "Question about Friday times",
+        messages: [
+          { from: "customer", text: "Hi! Do you have anything after 4pm on Friday?", at: nowISO() }
+        ]
+      },
+      {
+        id: uid("chat"),
+        locked: false,
+        customerName: "Sam Green",
+        customerEmail: "sam@example.com",
+        createdAt: nowISO(),
+        subject: "Can I change my booking?",
+        messages: [
+          { from: "customer", text: "Hey — is it possible to reschedule to next week?", at: nowISO() }
+        ]
+      }
+    ],
+    ui: {
+      activeTab: "pageEditor",
+      chatSelectedId: "welcome"
+    }
+  };
 }
 
 /* ---------- ROUTER ---------- */
@@ -171,7 +237,6 @@ function render() {
     return;
   }
 
-  // app/admin
   if (!st.auth.trialAccepted) {
     renderLanding(st);
     return;
@@ -187,33 +252,14 @@ function render() {
 
 /* ---------- LANDING ---------- */
 function renderLanding(st) {
-  const step = st.onboarding.step ?? 0;
-  const steps = [
-    {
-      title: "Create a booking page",
-      body: "Set your title, description, brand colours, services, and optional paywalls."
-    },
-    {
-      title: "Publish & share your link",
-      body: "A public customer link opens in a new tab and only shows your booking page."
-    },
-    {
-      title: "Manage bookings + finance",
-      body: "Block out days, cancel bookings, issue refunds, and see income charts — prototype style."
-    }
-  ];
-
   appRoot.innerHTML = `
     <header class="topbar">
       <div class="container">
-        <div class="brand">
-          <div class="brand-badge">B</div>
-          <div>Booking.prototype</div>
-          <span class="pill">Prototype</span>
-        </div>
+        <div class="brand">Booking.prototype</div>
         <div class="nav-actions">
-          <button class="btn btn-ghost" id="resetBtn">Reset session</button>
-          <button class="btn" id="viewDemoPublicBtn">View demo public page</button>
+          <button class="btn btn-ghost" id="resetBtn">Reset</button>
+          <button class="btn" id="loginBtn">Log in</button>
+          <button class="btn btn-primary" id="tryFreeBtn">Start free trial</button>
         </div>
       </div>
     </header>
@@ -222,147 +268,169 @@ function renderLanding(st) {
       <div class="container">
         <div class="hero-grid">
           <section>
-            <h1 class="h1">A clean booking system that feels real.</h1>
+            <h1 class="h1">A clean booking system for service businesses.</h1>
             <p class="lead">
-              Booking.prototype is a front-end prototype that simulates a full workflow:
-              page editor → publish → customer booking → notifications → finance, reviews, and chat.
-              Nothing is stored permanently (session cache only).
+              Create a branded booking page in minutes — set your title, description, colours, and services.
+              Customers choose a service, pick an available time, and get instant confirmation.
             </p>
+            <ul class="feature-list">
+              <li>Custom booking page with your branding and services</li>
+              <li>Optional paywall per service (paid checkout flow)</li>
+              <li>Manage days off, cancellations, and notifications</li>
+              <li>Finance overview with refunds and Stripe connection</li>
+              <li>Customer reviews and a built-in inbox-style chat</li>
+            </ul>
 
-            <div class="inline">
-              <button class="btn btn-primary" id="tryFreeBtn">Sign up free trial now</button>
+            <div class="inline" style="margin-top:18px;">
+              <button class="btn btn-primary" id="tryFreeBtn2">Start free trial</button>
               <span class="pill">14 days free · then £24.99/month</span>
             </div>
 
-            <div class="kpi-row">
-              <div class="kpi">
-                <div class="k">Setup time</div>
-                <div class="v">~2 minutes</div>
-              </div>
-              <div class="kpi">
-                <div class="k">Public link</div>
-                <div class="v">New tab</div>
-              </div>
-              <div class="kpi">
-                <div class="k">Data</div>
-                <div class="v">Session cache</div>
-              </div>
-            </div>
-
-            <div class="hr"></div>
-            <div class="small">
-              Built for GitHub + Vercel static deploys (index.html + main.js + styles.css).
+            <div class="footer-note">
+              Designed to feel simple, fast, and professional — without extra clutter.
             </div>
           </section>
 
           <aside class="card card-pad">
-            <div class="step-head">
-              <div class="step-title">Walkthrough</div>
-              <span class="pill">${step + 1} / ${steps.length}</span>
+            <div style="font-weight:900; letter-spacing:-0.01em;">What you’ll build</div>
+            <div class="hr"></div>
+            <div class="small" style="line-height:1.6;">
+              A customer-facing booking page with:
             </div>
-            <div class="steps" style="margin-top:12px;">
-              <div class="step">
-                <div class="step-title">${h(steps[step].title)}</div>
-                <div class="step-body">${h(steps[step].body)}</div>
-                <div class="step-controls">
-                  <button class="btn" id="prevStepBtn" ${step === 0 ? "disabled" : ""}>Back</button>
-                  <button class="btn" id="nextStepBtn">${step === steps.length - 1 ? "Done" : "Next"}</button>
-                </div>
-              </div>
-              <div class="small">
-                Tip: Click “Sign up free trial now” to see the paywall acceptance → app dashboard.
-              </div>
+            <ul class="feature-list" style="margin-top:10px;">
+              <li>Calendar with available days and times</li>
+              <li>Service selection with optional payment</li>
+              <li>Account creation at booking/checkout</li>
+              <li>Customer review + chat entry points</li>
+            </ul>
+
+            <div class="hr"></div>
+
+            <button class="btn" id="viewDemoPublicBtn" style="width:100%;">View example booking page</button>
+            <div class="small" style="margin-top:10px;">
+              Opens in a new tab — like a real customer link.
             </div>
           </aside>
-        </div>
-
-        <div class="footer-note">
-          This is a prototype UI: payments, accounts, email/SMS confirmations are simulated.
         </div>
       </div>
     </main>
   `;
 
-  document.getElementById("prevStepBtn").onclick = () => {
-    const ns = loadState();
-    ns.onboarding.step = Math.max(0, (ns.onboarding.step || 0) - 1);
-    saveState(ns);
-    render();
-  };
-  document.getElementById("nextStepBtn").onclick = () => {
-    const ns = loadState();
-    const next = (ns.onboarding.step || 0) + 1;
-    ns.onboarding.step = Math.min(steps.length - 1, next);
-    saveState(ns);
+  document.getElementById("resetBtn").onclick = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    toast("Reset", "Cleared saved setup for this device.");
     render();
   };
 
-  document.getElementById("tryFreeBtn").onclick = () => {
+  const openTrial = () => {
     openModal({
-      title: "Start free trial",
-      description: "14 days free, then £24.99/month. Prototype paywall acceptance.",
+      title: "Start your free trial",
+      description: "14 days free, then £24.99/month.",
       bodyHTML: `
         <div class="field">
           <div class="label">Plan</div>
           <div class="input" style="display:flex;justify-content:space-between;gap:10px;">
-            <span><b>Booking.prototype</b> · Pro</span>
+            <span><b>Pro</b></span>
             <span class="pill">£24.99/mo after trial</span>
           </div>
         </div>
+
         <div class="field">
-          <div class="label">Payment method (fake)</div>
-          <input class="input" placeholder="Card number (prototype)" value="4242 4242 4242 4242"/>
+          <div class="label">Payment method</div>
+          <input class="input" placeholder="Card number" value="4242 4242 4242 4242"/>
           <div class="inline">
             <input class="input" style="width:120px" placeholder="MM/YY" value="12/29"/>
             <input class="input" style="width:120px" placeholder="CVC" value="123"/>
             <input class="input" style="flex:1" placeholder="Name on card" value="Demo User"/>
           </div>
-          <div class="small">No real charge. This only unlocks the prototype dashboard.</div>
         </div>
+
+        <div class="small">Your trial starts immediately.</div>
       `,
-      secondaryText: "Not now",
+      secondaryText: "Cancel",
       onSecondary: (close) => close(),
-      primaryText: "Accept & continue",
+      tertiary: {
+        text: "Apple Pay",
+        onClick: (close) => {
+          const ns = loadState();
+          ns.auth.trialAccepted = true;
+          saveState(ns);
+          close();
+          render();
+        }
+      },
+      primaryText: "Continue",
       onPrimary: (close) => {
         const ns = loadState();
         ns.auth.trialAccepted = true;
         saveState(ns);
         close();
-        toast("Trial started", "You’re on a 14-day free trial (prototype).");
         render();
       }
     });
   };
 
-  document.getElementById("resetBtn").onclick = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    toast("Session reset", "Prototype cache cleared.");
-    render();
+  document.getElementById("tryFreeBtn").onclick = openTrial;
+  document.getElementById("tryFreeBtn2").onclick = openTrial;
+
+  document.getElementById("loginBtn").onclick = () => {
+    openModal({
+      title: "Log in",
+      description: "Enter your email to continue.",
+      bodyHTML: `
+        <div class="field">
+          <div class="label">Email</div>
+          <input id="loginEmail" class="input" value="${h(st.auth.userEmail || "owner@demo.com")}" />
+        </div>
+        <div class="field">
+          <div class="label">Password</div>
+          <input class="input" value="demo-password" />
+        </div>
+      `,
+      secondaryText: "Cancel",
+      onSecondary: (close)=>close(),
+      primaryText: "Log in",
+      onPrimary: (close) => {
+        const email = (document.getElementById("loginEmail").value || "").trim() || "owner@demo.com";
+        const ns = loadState();
+        ns.auth.trialAccepted = true;  // for your purposes: login just goes to index
+        ns.auth.signedIn = true;
+        ns.auth.userEmail = email;
+        saveState(ns);
+        close();
+        render();
+      }
+    });
   };
 
   document.getElementById("viewDemoPublicBtn").onclick = () => {
     const ns = loadState();
-    // create a demo slug if needed
-    if (!ns.editor.publicSlug) ns.editor.publicSlug = "demo-" + uid("pg").slice(-6);
+    if (!ns.editor.publicSlug) ns.editor.publicSlug = "example-" + uid("pg").slice(-6);
+    ns.editor.created = true;
     ns.editor.published = true;
+
+    // ensure there is at least 1 service in example mode
+    if (ns.editor.services.length === 0) {
+      ns.editor.services = [
+        { id: uid("svc"), name: "Consultation", durationMins: 30, price: 0, paywalled: false },
+        { id: uid("svc"), name: "Standard Session", durationMins: 60, price: 49.99, paywalled: true },
+      ];
+    }
+
     saveState(ns);
     const url = `${location.origin}${location.pathname}?public=1&slug=${encodeURIComponent(ns.editor.publicSlug)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 }
 
-/* ---------- SIGNUP (FAKE) ---------- */
+/* ---------- SIGNUP ---------- */
 function renderFakeSignup(st) {
   appRoot.innerHTML = `
     <header class="topbar">
       <div class="container">
-        <div class="brand">
-          <div class="brand-badge">B</div>
-          <div>Booking.prototype</div>
-          <span class="pill">Trial active</span>
-        </div>
+        <div class="brand">Booking.prototype</div>
         <div class="nav-actions">
-          <button class="btn btn-ghost" id="backToLandingBtn">Back</button>
+          <button class="btn btn-ghost" id="backBtn">Back</button>
         </div>
       </div>
     </header>
@@ -372,53 +440,32 @@ function renderFakeSignup(st) {
         <div class="card card-pad" style="max-width: 720px; margin: 0 auto;">
           <div class="page-head" style="margin-bottom: 0;">
             <div>
-              <h2>Create your owner account</h2>
-              <p>Prototype sign-up. This unlocks the dashboard and simulates an owner login.</p>
+              <h2>Create your account</h2>
+              <p>Set up your workspace and start building your booking page.</p>
             </div>
           </div>
 
           <div class="hr"></div>
 
-          <div class="grid-2">
-            <div>
-              <div class="field">
-                <div class="label">Email</div>
-                <input id="ownerEmail" class="input" placeholder="you@business.com" value="${h(st.auth.userEmail || "owner@demo.com")}"/>
-              </div>
-              <div class="field">
-                <div class="label">Password (fake)</div>
-                <input class="input" placeholder="••••••••" value="demo-password"/>
-              </div>
-              <div class="inline">
-                <button class="btn btn-primary" id="createOwnerBtn">Create account</button>
-                <span class="small">No backend — saved in session cache.</span>
-              </div>
-            </div>
-
-            <div class="card card-pad" style="background: var(--muted);">
-              <div class="step-title">What you’ll get</div>
-              <div class="step-body">
-                <ul style="margin:10px 0 0; padding-left: 18px; color: var(--subtext); line-height:1.6;">
-                  <li>Page Editor (title, description, colours, services, paywalls)</li>
-                  <li>Bookings (days off, cancellations, notifications)</li>
-                  <li>Finance (income, services paid, refunds)</li>
-                  <li>Reviews + Chat (customer-side widgets)</li>
-                </ul>
-              </div>
-            </div>
+          <div class="field">
+            <div class="label">Email</div>
+            <input id="ownerEmail" class="input" placeholder="you@business.com" value="${h(st.auth.userEmail || "owner@demo.com")}"/>
+          </div>
+          <div class="field">
+            <div class="label">Password</div>
+            <input class="input" placeholder="••••••••" value="demo-password"/>
           </div>
 
-          <div class="hr"></div>
-
-          <div class="small">
-            Pricing: 14-day free trial then £24.99/month (simulated).
+          <div class="inline">
+            <button class="btn btn-primary" id="createOwnerBtn">Continue</button>
+            <span class="small">You can update everything later.</span>
           </div>
         </div>
       </div>
     </main>
   `;
 
-  document.getElementById("backToLandingBtn").onclick = () => {
+  document.getElementById("backBtn").onclick = () => {
     const ns = loadState();
     ns.auth.trialAccepted = false;
     ns.auth.signedIn = false;
@@ -427,12 +474,12 @@ function renderFakeSignup(st) {
   };
 
   document.getElementById("createOwnerBtn").onclick = () => {
-    const email = document.getElementById("ownerEmail").value.trim() || "owner@demo.com";
+    const email = (document.getElementById("ownerEmail").value || "").trim() || "owner@demo.com";
     const ns = loadState();
     ns.auth.signedIn = true;
     ns.auth.userEmail = email;
     saveState(ns);
-    toast("Welcome", "Owner account created (prototype).");
+    toast("Welcome", "You're in.");
     render();
   };
 }
@@ -451,38 +498,31 @@ function renderDashboard(st) {
   appRoot.innerHTML = `
     <header class="topbar">
       <div class="container">
-        <div class="brand">
-          <div class="brand-badge">B</div>
-          <div>Booking.prototype</div>
-          <span class="pill">Owner</span>
-        </div>
+        <div class="brand">Booking.prototype</div>
         <div class="nav-actions">
           <span class="pill">${h(st.auth.userEmail || "owner@demo.com")}</span>
-          <button class="btn btn-ghost" id="resetBtn">Reset session</button>
+          <button class="btn btn-ghost" id="resetBtn">Reset</button>
         </div>
       </div>
     </header>
 
     <div class="layout">
       <aside class="sidebar">
-        <div class="side-title">Workspace</div>
-        <div class="side-group">
-          ${tabs.map(t => `
-            <button class="side-link ${t.key === tab ? "active" : ""}" data-tab="${t.key}">
-              <span>${h(t.label)}</span>
-              ${t.key === "bookings" ? `<span class="pill">${countUpcoming(st)}</span>` : ``}
-            </button>
-          `).join("")}
-        </div>
+        <div class="side-title">Dashboard</div>
+        ${tabs.map(t => `
+          <button class="side-link ${t.key === tab ? "active" : ""}" data-tab="${t.key}">
+            <span>${h(t.label)}</span>
+          </button>
+        `).join("")}
 
         <div class="side-title">Public page</div>
         <div class="card card-pad" style="margin-top: 8px;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <div style="font-weight:800; letter-spacing:-0.01em;">${h(st.editor.pageTitle || "Your booking page")}</div>
-            <span class="badge ${st.editor.published ? "success" : "warn"}">${st.editor.published ? "Published" : "Draft"}</span>
+            <div style="font-weight:900; letter-spacing:-0.01em;">${h(st.editor.pageTitle || "Your booking page")}</div>
+            <span class="badge ${st.editor.published ? "success" : "warn"}">${st.editor.published ? "Live" : "Not published"}</span>
           </div>
           <div class="small" style="margin-top:8px;">
-            Create/publish your page in <b>Page editor</b>. Share the link with customers.
+            Create your page, then publish changes to update the customer link.
           </div>
         </div>
       </aside>
@@ -507,23 +547,21 @@ function renderDashboard(st) {
   });
 
   document.getElementById("resetBtn").onclick = () => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    toast("Session reset", "Prototype cache cleared.");
+    localStorage.removeItem(STORAGE_KEY);
+    toast("Reset", "Cleared saved setup for this device.");
     render();
   };
 
-  // hook any tab-specific handlers
   wireDashboardHandlers();
+  drawIncomeChartIfPresent();
 }
 
 function wireDashboardHandlers() {
-  // Page Editor handlers (if present)
-  const title = document.getElementById("pe_title");
-  if (title) {
-    title.oninput = () => updateEditorFromInputs();
-    document.getElementById("pe_desc").oninput = () => updateEditorFromInputs();
-    document.getElementById("pe_brand").oninput = () => updateEditorFromInputs();
-    document.getElementById("pe_accent").oninput = () => updateEditorFromInputs();
+  // Page Editor
+  if (document.getElementById("pe_title")) {
+    ["pe_title","pe_desc","pe_brand","pe_accent"].forEach(id=>{
+      document.getElementById(id).oninput = () => updateEditorFromInputs();
+    });
 
     document.getElementById("addServiceBtn").onclick = () => {
       const ns = loadState();
@@ -536,7 +574,6 @@ function wireDashboardHandlers() {
       });
       saveState(ns);
       render();
-      toast("Service added", "Edit name, duration, and paywall settings.");
     };
 
     document.querySelectorAll("[data-svc-edit]").forEach(el => {
@@ -550,11 +587,19 @@ function wireDashboardHandlers() {
         if (field === "name") svc.name = el.value;
         if (field === "durationMins") svc.durationMins = Math.max(15, Number(el.value || 30));
         if (field === "price") svc.price = Math.max(0, Number(el.value || 0));
-        if (field === "paywalled") svc.paywalled = !!el.checked;
 
         saveState(ns);
-        // do not full render for every keypress, but acceptable for prototype
       };
+      if (el.type === "checkbox") {
+        el.onchange = () => {
+          const ns = loadState();
+          const id = el.dataset.svcEdit;
+          const svc = ns.editor.services.find(s => s.id === id);
+          if (!svc) return;
+          svc.paywalled = !!el.checked;
+          saveState(ns);
+        };
+      }
     });
 
     document.querySelectorAll("[data-svc-remove]").forEach(btn => {
@@ -563,7 +608,6 @@ function wireDashboardHandlers() {
         const id = btn.dataset.svcRemove;
         ns.editor.services = ns.editor.services.filter(s => s.id !== id);
         saveState(ns);
-        toast("Service removed", "Service removed from setup.");
         render();
       };
     });
@@ -571,20 +615,28 @@ function wireDashboardHandlers() {
     const createPageBtn = document.getElementById("createPageBtn");
     if (createPageBtn) createPageBtn.onclick = () => {
       const ns = loadState();
+      if (ns.editor.services.length === 0) {
+        toast("Add a service", "Create at least one service before creating your page.");
+        return;
+      }
       if (!ns.editor.publicSlug) ns.editor.publicSlug = slugify(ns.editor.pageTitle) || ("page-" + uid("pg").slice(-6));
-      ns.editor.published = true;
+      ns.editor.created = true;
+      // created does NOT auto publish; your bottom publish button handles it
       saveState(ns);
-      toast("Page created", "Public page link generated.");
+      toast("Page created", "Your customer link is ready. Publish changes when you're ready to go live.");
       render();
     };
 
-    const publishBtn = document.getElementById("publishPageBtn");
-    if (publishBtn) publishBtn.onclick = () => {
+    const publishBottom = document.getElementById("publishChangesBtn");
+    if (publishBottom) publishBottom.onclick = () => {
       const ns = loadState();
-      if (!ns.editor.publicSlug) ns.editor.publicSlug = slugify(ns.editor.pageTitle) || ("page-" + uid("pg").slice(-6));
+      if (!ns.editor.publicSlug) {
+        toast("Create page first", "Generate your customer link first.");
+        return;
+      }
       ns.editor.published = true;
       saveState(ns);
-      toast("Published", "Your public booking page is updated.");
+      toast("Published", "Your booking page is now live.");
       render();
     };
 
@@ -592,7 +644,7 @@ function wireDashboardHandlers() {
     if (openPublicBtn) openPublicBtn.onclick = () => {
       const ns = loadState();
       if (!ns.editor.publicSlug) {
-        toast("No public page yet", "Click Create page first.");
+        toast("Create page first", "Generate your customer link first.");
         return;
       }
       const url = `${location.origin}${location.pathname}?public=1&slug=${encodeURIComponent(ns.editor.publicSlug)}`;
@@ -602,78 +654,43 @@ function wireDashboardHandlers() {
     const copyLinkBtn = document.getElementById("copyPublicBtn");
     if (copyLinkBtn) copyLinkBtn.onclick = async () => {
       const ns = loadState();
-      if (!ns.editor.publicSlug) return toast("No link", "Create the page to generate a link.");
+      if (!ns.editor.publicSlug) return toast("Create page first", "Generate your customer link first.");
       const url = `${location.origin}${location.pathname}?public=1&slug=${encodeURIComponent(ns.editor.publicSlug)}`;
-      try {
-        await navigator.clipboard.writeText(url);
-        toast("Copied", "Public link copied to clipboard.");
-      } catch {
-        toast("Copy failed", "Your browser blocked clipboard. Select and copy manually.");
-      }
+      try { await navigator.clipboard.writeText(url); toast("Copied", "Customer link copied."); }
+      catch { toast("Copy failed", "Select and copy manually."); }
     };
   }
 
-  // Bookings handlers
-  const addDayOffBtn = document.getElementById("addDayOffBtn");
-  if (addDayOffBtn) addDayOffBtn.onclick = () => {
-    const date = document.getElementById("dayOffDate").value;
-    const reason = document.getElementById("dayOffReason").value.trim() || "Unavailable";
-    if (!date) return toast("Missing date", "Pick a date to block off.");
+  // Bookings: ranges
+  const addRangeBtn = document.getElementById("addDayOffRangeBtn");
+  if (addRangeBtn) addRangeBtn.onclick = () => {
+    const start = document.getElementById("dayOffStart").value;
+    const end = document.getElementById("dayOffEnd").value || start;
+    const reason = (document.getElementById("dayOffReason").value || "").trim() || "Unavailable";
+    if (!start) return toast("Missing date", "Pick a start date.");
 
     const ns = loadState();
-    if (!ns.bookings.daysOff.some(d => d.date === date)) {
-      ns.bookings.daysOff.push({ date, reason });
-      saveState(ns);
-      toast("Day blocked", "Customers will see this day unavailable.");
-      render();
-    } else {
-      toast("Already blocked", "That date is already marked as a day off.");
-    }
+    ns.bookings.daysOffRanges.push({
+      id: uid("off"),
+      startDate: start,
+      endDate: end < start ? start : end,
+      reason
+    });
+    saveState(ns);
+    toast("Saved", "Your days off have been updated.");
+    render();
   };
 
-  document.querySelectorAll("[data-remove-dayoff]").forEach(btn => {
+  document.querySelectorAll("[data-remove-offrange]").forEach(btn => {
     btn.onclick = () => {
       const ns = loadState();
-      const date = btn.dataset.removeDayoff;
-      ns.bookings.daysOff = ns.bookings.daysOff.filter(d => d.date !== date);
+      const id = btn.dataset.removeOffrange;
+      ns.bookings.daysOffRanges = ns.bookings.daysOffRanges.filter(r => r.id !== id);
       saveState(ns);
-      toast("Removed", "Day off removed.");
       render();
     };
   });
 
-  document.querySelectorAll("[data-cancel-booking]").forEach(btn => {
-    btn.onclick = () => {
-      const id = btn.dataset.cancelBooking;
-      const ns = loadState();
-      const b = ns.bookings.items.find(x => x.id === id);
-      if (!b) return;
-      openModal({
-        title: "Cancel booking",
-        description: "Add a reason/warning (visible to customer in prototype).",
-        bodyHTML: `
-          <div class="field">
-            <div class="label">Reason</div>
-            <textarea id="cancelReason" class="textarea" placeholder="e.g. Staff unavailable, emergency, holiday change..."></textarea>
-          </div>
-        `,
-        secondaryText: "Keep booking",
-        onSecondary: (close) => close(),
-        primaryText: "Cancel booking",
-        onPrimary: (close) => {
-          const reason = (document.getElementById("cancelReason").value || "").trim();
-          b.status = "cancelled";
-          b.cancelReason = reason;
-          saveState(ns);
-          close();
-          toast("Cancelled", "Booking cancelled (prototype).");
-          render();
-        }
-      });
-    };
-  });
-
-  // Notify toggles
   const notifyEmail = document.getElementById("notifyEmail");
   if (notifyEmail) notifyEmail.onchange = () => {
     const ns = loadState();
@@ -689,17 +706,80 @@ function wireDashboardHandlers() {
     toast("Saved", "Notification preference updated.");
   };
 
-  // Finance refund handlers
+  // Cancel booking
+  document.querySelectorAll("[data-cancel-booking]").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.cancelBooking;
+      const ns = loadState();
+      const b = ns.bookings.items.find(x => x.id === id);
+      if (!b) return;
+
+      openModal({
+        title: "Cancel booking",
+        description: "Add a short note for the customer.",
+        bodyHTML: `
+          <div class="field">
+            <div class="label">Reason</div>
+            <textarea id="cancelReason" class="textarea" placeholder="e.g. Holiday change, unavailable, reschedule..."></textarea>
+          </div>
+        `,
+        secondaryText: "Keep booking",
+        onSecondary: (close)=>close(),
+        primaryText: "Cancel booking",
+        onPrimary: (close) => {
+          b.status = "cancelled";
+          b.cancelReason = (document.getElementById("cancelReason").value || "").trim();
+          saveState(ns);
+          close();
+          render();
+        }
+      });
+    };
+  });
+
+  // Finance: Stripe connect
+  const connectStripeBtn = document.getElementById("connectStripeBtn");
+  if (connectStripeBtn) connectStripeBtn.onclick = () => {
+    openModal({
+      title: "Connect Stripe",
+      description: "Connect your Stripe account to accept payments.",
+      bodyHTML: `
+        <div class="field">
+          <div class="label">Business name</div>
+          <input id="stripeBiz" class="input" placeholder="Studio Nova" value="Studio Nova"/>
+        </div>
+        <div class="field">
+          <div class="label">Email</div>
+          <input id="stripeEmail" class="input" placeholder="billing@business.com" value="billing@studionova.com"/>
+        </div>
+        <div class="small">This simulates the connection flow.</div>
+      `,
+      secondaryText: "Cancel",
+      onSecondary: (close)=>close(),
+      primaryText: "Connect",
+      onPrimary: (close) => {
+        const ns = loadState();
+        ns.finance.stripeConnected = true;
+        ns.finance.stripeAccountName = (document.getElementById("stripeBiz").value || "").trim() || "Stripe Account";
+        saveState(ns);
+        close();
+        toast("Connected", "Stripe account connected.");
+        render();
+      }
+    });
+  };
+
+  // Finance: refund
   document.querySelectorAll("[data-refund]").forEach(btn => {
     btn.onclick = () => {
       const bookingId = btn.dataset.refund;
       const ns = loadState();
       const b = ns.bookings.items.find(x => x.id === bookingId);
-      if (!b || !b.paid) return;
+      if (!b || !b.paid || b.refunded) return;
 
       openModal({
         title: "Issue refund",
-        description: "Prototype refund flow. This will mark the booking as refunded.",
+        description: "Refund this payment.",
         bodyHTML: `
           <div class="field">
             <div class="label">Customer</div>
@@ -709,10 +789,9 @@ function wireDashboardHandlers() {
             <div class="label">Amount</div>
             <input id="refundAmount" class="input" type="number" step="0.01" value="${h(b.paidAmount || b.price || 0)}"/>
           </div>
-          <div class="small">No real money moves — this only updates the UI.</div>
         `,
         secondaryText: "Cancel",
-        onSecondary: (close) => close(),
+        onSecondary: (close)=>close(),
         primaryText: "Refund",
         onPrimary: (close) => {
           const amt = Math.max(0, Number(document.getElementById("refundAmount").value || 0));
@@ -726,62 +805,37 @@ function wireDashboardHandlers() {
           });
           saveState(ns);
           close();
-          toast("Refunded", `Refund recorded: £${amt.toFixed(2)} (prototype).`);
           render();
         }
       });
     };
   });
 
-  // Owner chat reply
-  document.querySelectorAll("[data-open-chat]").forEach(btn => {
-    btn.onclick = () => {
-      const chatId = btn.dataset.openChat;
+  // Chat inbox selection + reply
+  document.querySelectorAll("[data-chat-select]").forEach(item => {
+    item.onclick = () => {
       const ns = loadState();
-      const thread = ns.chats.find(c => c.id === chatId);
-      if (!thread) return;
-
-      openModal({
-        title: `Chat with ${thread.customerName}`,
-        description: `Prototype thread · ${thread.customerEmail}`,
-        bodyHTML: `
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <div class="card card-pad" style="max-height: 320px; overflow:auto;">
-              ${thread.messages.map(m => `
-                <div style="margin-bottom:10px;">
-                  <div class="small" style="font-weight:800; color: var(--subtext);">
-                    ${m.from === "owner" ? "You" : h(thread.customerName)} · ${fmtTime(m.at)}
-                  </div>
-                  <div style="line-height:1.5;">${h(m.text)}</div>
-                </div>
-              `).join("")}
-            </div>
-
-            <div class="field" style="margin:0;">
-              <div class="label">Reply</div>
-              <textarea id="ownerReply" class="textarea" placeholder="Type your message..."></textarea>
-            </div>
-            <div class="small">This simulates in-app messaging. No real delivery.</div>
-          </div>
-        `,
-        secondaryText: "Close",
-        onSecondary: (close)=>close(),
-        primaryText: "Send",
-        onPrimary: (close) => {
-          const text = (document.getElementById("ownerReply").value || "").trim();
-          if (!text) return toast("Empty message", "Type a reply first.");
-          const ns2 = loadState();
-          const thread2 = ns2.chats.find(c => c.id === chatId);
-          if (!thread2) return;
-          thread2.messages.push({ from: "owner", text, at: nowISO() });
-          saveState(ns2);
-          toast("Sent", "Reply added to thread (prototype).");
-          close();
-          render();
-        }
-      });
+      ns.ui.chatSelectedId = item.dataset.chatSelect;
+      saveState(ns);
+      render();
     };
   });
+
+  const sendBtn = document.getElementById("sendReplyBtn");
+  if (sendBtn) sendBtn.onclick = () => {
+    const ns = loadState();
+    const thread = ns.chats.find(c => c.id === ns.ui.chatSelectedId);
+    if (!thread || thread.locked) return;
+
+    const box = document.getElementById("replyText");
+    const text = (box.value || "").trim();
+    if (!text) return toast("Empty", "Write a message first.");
+
+    thread.messages.push({ from: "owner", text, at: nowISO() });
+    saveState(ns);
+    box.value = "";
+    render();
+  };
 }
 
 function updateEditorFromInputs() {
@@ -808,16 +862,19 @@ function viewPageEditor(st) {
     ? `${location.origin}${location.pathname}?public=1&slug=${encodeURIComponent(st.editor.publicSlug)}`
     : "";
 
+  const primaryAction = !st.editor.created
+    ? `<button class="btn btn-primary" id="createPageBtn">Create page</button>`
+    : `<button class="btn btn-primary" id="publishChangesBtn">Publish changes</button>`;
+
   return `
     <div class="page-head">
       <div>
         <h2>Page editor</h2>
-        <p>Set your booking page details, brand colours, services, and optional paywalls.</p>
+        <p>Set your booking page details, branding, services and payment rules.</p>
       </div>
       <div class="inline">
-        <button class="btn" id="openPublicBtn" ${!st.editor.publicSlug ? "disabled" : ""}>Open public page</button>
+        <button class="btn" id="openPublicBtn" ${!st.editor.publicSlug ? "disabled" : ""}>Open booking page</button>
         <button class="btn" id="copyPublicBtn" ${!st.editor.publicSlug ? "disabled" : ""}>Copy link</button>
-        <button class="btn btn-primary" id="publishPageBtn">Publish</button>
       </div>
     </div>
 
@@ -835,11 +892,11 @@ function viewPageEditor(st) {
         <div class="grid-2">
           <div class="field">
             <div class="label">Brand colour</div>
-            <input id="pe_brand" class="input" type="color" value="${h(st.editor.brandColor)}" />
+            <input id="pe_brand" class="color-input" type="color" value="${h(st.editor.brandColor)}" />
           </div>
           <div class="field">
             <div class="label">Accent colour</div>
-            <input id="pe_accent" class="input" type="color" value="${h(st.editor.accentColor)}" />
+            <input id="pe_accent" class="color-input" type="color" value="${h(st.editor.accentColor)}" />
           </div>
         </div>
 
@@ -847,14 +904,16 @@ function viewPageEditor(st) {
 
         <div class="inline" style="justify-content:space-between;">
           <div>
-            <div style="font-weight:800; letter-spacing:-0.01em;">Services</div>
-            <div class="small">Add services and choose paywalls + pricing.</div>
+            <div style="font-weight:900; letter-spacing:-0.01em;">Services</div>
+            <div class="small">Add services and choose whether payment is required.</div>
           </div>
           <button class="btn" id="addServiceBtn">Add service</button>
         </div>
 
         <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
-          ${st.editor.services.map(svc => `
+          ${st.editor.services.length === 0 ? `
+            <div class="small">No services yet. Add your first service to get started.</div>
+          ` : st.editor.services.map(svc => `
             <div class="card card-pad" style="border-radius:12px;">
               <div class="grid-2">
                 <div class="field">
@@ -867,23 +926,25 @@ function viewPageEditor(st) {
                     data-svc-edit="${h(svc.id)}" data-field="durationMins" value="${h(svc.durationMins)}" />
                 </div>
               </div>
+
               <div class="grid-2">
                 <div class="field">
                   <div class="label">Price (£)</div>
                   <input class="input" type="number" min="0" step="0.01"
                     data-svc-edit="${h(svc.id)}" data-field="price" value="${h(svc.price)}" />
-                  <div class="small">If paywalled, customer goes through a fake checkout.</div>
                 </div>
+
                 <div class="field">
-                  <div class="label">Paywall</div>
-                  <div class="inline">
+                  <div class="label">Payment</div>
+                  <div class="inline" style="justify-content:space-between;">
                     <label class="badge info" style="cursor:pointer;">
                       <input type="checkbox" style="margin-right:8px;"
                         data-svc-edit="${h(svc.id)}" data-field="paywalled" ${svc.paywalled ? "checked" : ""}/>
                       Require payment
                     </label>
-                    <button class="btn btn-danger" data-svc-remove="${h(svc.id)}">Remove</button>
+                    <button class="btn btn-ghost" style="border:1px solid var(--border);" data-svc-remove="${h(svc.id)}">Remove</button>
                   </div>
+                  <div class="small">If enabled, customers pay at checkout before confirming.</div>
                 </div>
               </div>
             </div>
@@ -894,86 +955,87 @@ function viewPageEditor(st) {
 
         <div class="inline" style="justify-content:space-between;">
           <div>
-            <div style="font-weight:800;">Create page</div>
-            <div class="small">Generates a public link (customers only see the booking page).</div>
+            <div style="font-weight:900;">${st.editor.created ? "Publish updates" : "Create your booking page"}</div>
+            <div class="small">
+              ${st.editor.created
+                ? "Changes are saved. Publish when you're ready to update the live booking page."
+                : "Create your customer link. You can publish when you’re ready to go live."}
+            </div>
           </div>
-          <button class="btn btn-primary" id="createPageBtn">Create page</button>
+          ${primaryAction}
         </div>
 
         ${link ? `
           <div class="hr"></div>
           <div class="field">
-            <div class="label">Your public link</div>
+            <div class="label">Customer link</div>
             <div class="input mono">${h(link)}</div>
-            <div class="small">Opens in a new tab for a more “real” feel.</div>
           </div>
         ` : ""}
       </div>
 
       <div class="card card-pad">
-        <div style="font-weight:900; letter-spacing:-0.02em;">Live preview</div>
+        <div style="font-weight:900; letter-spacing:-0.01em;">Live preview</div>
         <div class="small" style="margin-top:6px;">
-          Quick visual preview (public page styling uses your selected colours).
+          A mini preview of what customers will see.
         </div>
 
         <div class="hr"></div>
 
-        <div class="card card-pad" style="border-radius:12px; border-color: var(--border);">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div class="brand-badge" style="border-color: var(--border); background: var(--muted);">P</div>
-            <div style="font-weight:900;">${h(st.editor.pageTitle)}</div>
-          </div>
-          <div style="margin-top:10px; color: var(--subtext); line-height:1.5;">
-            ${h(st.editor.pageDescription)}
+        <div class="preview-shell">
+          <div class="preview-banner" style="background:${h(st.editor.brandColor)};">
+            ${h(st.editor.pageTitle)}
           </div>
 
-          <div class="hr"></div>
+          <div class="preview-body">
+            <div class="small" style="line-height:1.55;">${h(st.editor.pageDescription)}</div>
 
-          <div class="inline" style="gap:8px; flex-wrap:wrap;">
-            <span class="badge info">Brand: <span style="font-family:var(--mono);">${h(st.editor.brandColor)}</span></span>
-            <span class="badge info">Accent: <span style="font-family:var(--mono);">${h(st.editor.accentColor)}</span></span>
-          </div>
-
-          <div class="hr"></div>
-
-          <div style="font-weight:800;">Services</div>
-          <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
-            ${st.editor.services.map(s => `
-              <div class="inline" style="justify-content:space-between;">
-                <div>
-                  <div style="font-weight:800;">${h(s.name)}</div>
-                  <div class="small">${h(s.durationMins)} mins</div>
-                </div>
-                <div class="inline">
-                  ${s.paywalled ? `<span class="badge warn">Paywall</span>` : `<span class="badge success">Free</span>`}
-                  <span class="badge info">£${Number(s.price || 0).toFixed(2)}</span>
+            <div style="margin-top:12px;" class="preview-mini-grid">
+              <div class="preview-cal">
+                <div class="preview-cal-head">Calendar</div>
+                <div class="preview-cal-body">
+                  ${Array.from({length:21}).map((_,i)=>{
+                    const accent = (i===3 || i===7 || i===12);
+                    return `<div class="preview-dot ${accent ? "accent":""}" style="${accent ? `border-color:${h(st.editor.accentColor)}55;background:${h(st.editor.accentColor)}1a;` : ""}"></div>`;
+                  }).join("")}
                 </div>
               </div>
-            `).join("")}
+
+              <div class="preview-services">
+                <h4>Services</h4>
+                ${st.editor.services.length === 0 ? `
+                  <div class="small">Add services to preview them here.</div>
+                ` : st.editor.services.slice(0,4).map(s => `
+                  <div class="preview-service-row">
+                    <div>
+                      <div class="name">${h(s.name)}</div>
+                      <div class="meta">${h(s.durationMins)} mins</div>
+                    </div>
+                    <div class="meta" style="text-align:right;">
+                      ${s.paywalled ? `£${Number(s.price||0).toFixed(2)}` : "Free"}
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="hr"></div>
-        <div class="small">
-          Publishing updates what customers see. Bookings/reviews/chat are simulated from the public page.
-        </div>
+        <div class="small">Open the booking page link to see the full customer experience.</div>
       </div>
     </div>
   `;
 }
 
 function viewBookings(st) {
-  const upcoming = getUpcomingBookings(st).slice(0, 12);
+  const { upcoming, previous } = splitBookings(st);
 
   return `
     <div class="page-head">
       <div>
         <h2>Bookings</h2>
-        <p>Block out days, cancel bookings, and manage notification toggles.</p>
-      </div>
-      <div class="inline">
-        <span class="badge info">Upcoming: ${upcoming.length}</span>
-        <button class="btn btn-primary" onclick="(${publishBookings.toString()})()">Publish</button>
+        <p>Manage days off, cancellations, and booking history.</p>
       </div>
     </div>
 
@@ -981,40 +1043,55 @@ function viewBookings(st) {
       <div class="card card-pad">
         <div style="font-weight:900;">Days off</div>
         <div class="small" style="margin-top:6px;">
-          These dates appear as unavailable on your public booking page.
+          Add a single day or a date range (customers will see these as unavailable).
         </div>
 
         <div class="hr"></div>
+
+        <div class="grid-2">
+          <div class="field">
+            <div class="label">Start date</div>
+            <input id="dayOffStart" class="input" type="date" />
+          </div>
+          <div class="field">
+            <div class="label">End date</div>
+            <input id="dayOffEnd" class="input" type="date" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">Reason</div>
+          <input id="dayOffReason" class="input" placeholder="Holiday, travel, unavailable..." />
+        </div>
 
         <div class="inline">
-          <input id="dayOffDate" class="input" type="date" />
-          <input id="dayOffReason" class="input" placeholder="Reason (holiday, travel, etc.)"/>
-          <button class="btn" id="addDayOffBtn">Add</button>
+          <button class="btn" id="addDayOffRangeBtn">Add days off</button>
+          <button class="btn btn-primary" onclick="(${publishBookings.toString()})()">Publish changes</button>
         </div>
 
         <div class="hr"></div>
 
-        ${st.bookings.daysOff.length === 0 ? `
-          <div class="small">No days off yet.</div>
+        ${st.bookings.daysOffRanges.length === 0 ? `
+          <div class="small">No days off added yet.</div>
         ` : `
           <table class="table">
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Dates</th>
                 <th>Reason</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              ${st.bookings.daysOff
+              ${st.bookings.daysOffRanges
                 .slice()
-                .sort((a,b)=>a.date.localeCompare(b.date))
-                .map(d => `
+                .sort((a,b)=>a.startDate.localeCompare(b.startDate))
+                .map(r => `
                   <tr>
-                    <td>${h(d.date)}</td>
-                    <td>${h(d.reason)}</td>
+                    <td>${h(r.startDate)} → ${h(r.endDate)}</td>
+                    <td>${h(r.reason)}</td>
                     <td style="text-align:right;">
-                      <button class="btn btn-danger" data-remove-dayoff="${h(d.date)}">Remove</button>
+                      <button class="btn btn-ghost" style="border:1px solid var(--border);" data-remove-offrange="${h(r.id)}">Remove</button>
                     </td>
                   </tr>
                 `).join("")}
@@ -1025,9 +1102,7 @@ function viewBookings(st) {
 
       <div class="card card-pad">
         <div style="font-weight:900;">Notifications</div>
-        <div class="small" style="margin-top:6px;">
-          Toggle how you’re alerted about new bookings (prototype).
-        </div>
+        <div class="small" style="margin-top:6px;">Choose how you receive booking alerts.</div>
 
         <div class="hr"></div>
 
@@ -1042,78 +1117,116 @@ function viewBookings(st) {
             Text alerts
           </label>
         </div>
-
-        <div class="hr"></div>
-
-        <div style="font-weight:900;">Upcoming bookings</div>
-        <div class="small" style="margin-top:6px;">
-          Cancel bookings and add an explanation (prototype).
-        </div>
-
-        <div class="hr"></div>
-
-        ${upcoming.length === 0 ? `
-          <div class="small">No upcoming bookings yet. Open your public page and make a booking as a customer.</div>
-        ` : `
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Service</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${upcoming.map(b => `
-                <tr>
-                  <td>
-                    <div style="font-weight:800;">${h(fmtDate(b.dateISO))}</div>
-                    <div class="small">${h(b.time)}</div>
-                  </td>
-                  <td>
-                    <div style="font-weight:800;">${h(b.customerName)}</div>
-                    <div class="small">${h(b.customerEmail)}</div>
-                  </td>
-                  <td>${h(b.serviceName)}</td>
-                  <td>
-                    ${b.status === "cancelled"
-                      ? `<span class="badge warn">Cancelled</span>`
-                      : `<span class="badge success">Confirmed</span>`}
-                    ${b.paid ? `<span class="badge info" style="margin-left:8px;">Paid</span>` : ""}
-                    ${b.refunded ? `<span class="badge warn" style="margin-left:8px;">Refunded</span>` : ""}
-                  </td>
-                  <td style="text-align:right;">
-                    ${b.status === "cancelled"
-                      ? `<span class="small">${h(b.cancelReason || "—")}</span>`
-                      : `<button class="btn btn-danger" data-cancel-booking="${h(b.id)}">Cancel</button>`}
-                  </td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        `}
       </div>
+    </div>
+
+    <div style="height:14px;"></div>
+
+    <div class="card card-pad">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:900;">Upcoming bookings</div>
+          <div class="small" style="margin-top:6px;">Cancel bookings and add a note for the customer.</div>
+        </div>
+        <button class="btn btn-primary" onclick="(${publishBookings.toString()})()">Publish changes</button>
+      </div>
+
+      <div class="hr"></div>
+
+      ${upcoming.length === 0 ? `
+        <div class="small">No upcoming bookings yet.</div>
+      ` : `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Service</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${upcoming.map(b => `
+              <tr>
+                <td>
+                  <div style="font-weight:800;">${h(fmtDate(b.dateISO))}</div>
+                  <div class="small">${h(b.time)}</div>
+                </td>
+                <td>
+                  <div style="font-weight:800;">${h(b.customerName)}</div>
+                  <div class="small">${h(b.customerEmail)}</div>
+                </td>
+                <td>${h(b.serviceName)}</td>
+                <td>
+                  ${b.status === "cancelled"
+                    ? `<span class="badge warn">Cancelled</span>`
+                    : `<span class="badge success">Confirmed</span>`}
+                  ${b.paid ? `<span class="badge info" style="margin-left:8px;">Paid</span>` : ""}
+                  ${b.refunded ? `<span class="badge warn" style="margin-left:8px;">Refunded</span>` : ""}
+                </td>
+                <td style="text-align:right;">
+                  ${b.status === "cancelled"
+                    ? `<span class="small">${h(b.cancelReason || "—")}</span>`
+                    : `<button class="btn btn-danger" data-cancel-booking="${h(b.id)}">Cancel</button>`}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `}
+    </div>
+
+    <div style="height:14px;"></div>
+
+    <div class="card card-pad">
+      <div style="font-weight:900;">Previous bookings</div>
+      <div class="small" style="margin-top:6px;">Completed and past bookings appear here.</div>
+
+      <div class="hr"></div>
+
+      ${previous.length === 0 ? `
+        <div class="small">No previous bookings yet.</div>
+      ` : `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Service</th>
+              <th>Paid</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${previous.map(b => `
+              <tr>
+                <td>${h(fmtDate(b.dateISO))} · <span class="small">${h(b.time)}</span></td>
+                <td>${h(b.customerName)} <span class="small">(${h(b.customerEmail)})</span></td>
+                <td>${h(b.serviceName)}</td>
+                <td>${b.paid ? `£${Number(b.paidAmount||0).toFixed(2)}` : "—"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `}
     </div>
   `;
 }
 
 function publishBookings() {
-  // purely cosmetic but gives the “workflow” feel
-  toast("Published", "Availability and booking changes are now live (prototype).");
+  toast("Updated", "Your changes are now reflected on the booking page.");
 }
 
 function viewFinance(st) {
   const income = calcIncome(st);
+  const paidCount = st.bookings.items.filter(b => b.paid && !b.refunded && b.status !== "cancelled").length;
   const paidByService = calcPaidByService(st);
-  const paidCount = st.bookings.items.filter(b => b.paid && !b.refunded).length;
 
-  // Refunds tab (simple)
   const refundable = st.bookings.items
-    .filter(b => b.paid && !b.refunded)
+    .filter(b => b.paid && !b.refunded && b.status !== "cancelled")
     .slice()
-    .sort((a,b)=> (a.dateISO||"").localeCompare(b.dateISO||""));
+    .sort((a,b)=> (a.dateISO||"").localeCompare(b.dateISO||""))
+    .slice(0, 10);
 
   const refundHistory = st.finance.refunds.slice().reverse().slice(0, 10);
 
@@ -1121,23 +1234,34 @@ function viewFinance(st) {
     <div class="page-head">
       <div>
         <h2>Finance</h2>
-        <p>Track income, paid services, charts, and issue refunds (prototype).</p>
-      </div>
-      <div class="inline">
-        <span class="badge info">Paid bookings: ${paidCount}</span>
-        <span class="badge success">Income: £${income.toFixed(2)}</span>
+        <p>Track payments, refunds, and connect your Stripe account.</p>
       </div>
     </div>
 
     <div class="grid-2">
       <div class="card card-pad">
-        <div style="font-weight:900;">Income overview</div>
-        <div class="small" style="margin-top:6px;">Chart is generated in-browser from session data.</div>
+        <div style="font-weight:900;">Overview</div>
         <div class="hr"></div>
+
+        <div class="inline" style="justify-content:space-between; align-items:flex-start;">
+          <div>
+            <div class="small">Paid bookings</div>
+            <div style="font-weight:900; font-size:22px; letter-spacing:-0.02em;">${paidCount}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="small">Income</div>
+            <div style="font-weight:900; font-size:22px; letter-spacing:-0.02em;">£${income.toFixed(2)}</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
         <div class="canvas-wrap">
           <canvas id="incomeChart" width="900" height="260"></canvas>
         </div>
+
         <div class="hr"></div>
+
         <table class="table">
           <thead>
             <tr>
@@ -1147,7 +1271,9 @@ function viewFinance(st) {
             </tr>
           </thead>
           <tbody>
-            ${paidByService.map(row => `
+            ${paidByService.length === 0 ? `
+              <tr><td colspan="3" class="small">No payments yet.</td></tr>
+            ` : paidByService.map(row => `
               <tr>
                 <td>${h(row.serviceName)}</td>
                 <td>${h(row.count)}</td>
@@ -1159,15 +1285,35 @@ function viewFinance(st) {
       </div>
 
       <div class="card card-pad">
-        <div style="font-weight:900;">Refunds</div>
+        <div style="font-weight:900;">Stripe connection</div>
         <div class="small" style="margin-top:6px;">
-          Select a paid booking and click refund (prototype).
+          Connect Stripe to accept payments on paywalled services.
         </div>
 
         <div class="hr"></div>
 
+        ${st.finance.stripeConnected ? `
+          <div class="badge success">Connected</div>
+          <div class="small" style="margin-top:10px;">
+            Account: <b>${h(st.finance.stripeAccountName || "Stripe Account")}</b>
+          </div>
+          <div class="hr"></div>
+          <button class="btn" id="connectStripeBtn">Manage connection</button>
+        ` : `
+          <div class="badge warn">Not connected</div>
+          <div class="hr"></div>
+          <button class="btn btn-primary" id="connectStripeBtn">Connect Stripe</button>
+        `}
+
+        <div class="hr"></div>
+
+        <div style="font-weight:900;">Refunds</div>
+        <div class="small" style="margin-top:6px;">Select a booking and issue a refund.</div>
+
+        <div class="hr"></div>
+
         ${refundable.length === 0 ? `
-          <div class="small">No refundable bookings right now.</div>
+          <div class="small">No refundable bookings.</div>
         ` : `
           <table class="table">
             <thead>
@@ -1179,7 +1325,7 @@ function viewFinance(st) {
               </tr>
             </thead>
             <tbody>
-              ${refundable.slice(0, 10).map(b => `
+              ${refundable.map(b => `
                 <tr>
                   <td>
                     <div style="font-weight:800;">${h(b.customerName)}</div>
@@ -1201,9 +1347,7 @@ function viewFinance(st) {
 
         <div class="hr"></div>
 
-        <div style="font-weight:900;">Recent refund activity</div>
-        <div class="small" style="margin-top:6px;">Latest 10 refunds.</div>
-
+        <div style="font-weight:900;">Recent refunds</div>
         <div class="hr"></div>
 
         ${refundHistory.length === 0 ? `
@@ -1239,17 +1383,22 @@ function viewReviews(st) {
     <div class="page-head">
       <div>
         <h2>Reviews</h2>
-        <p>Customers can leave reviews from your public booking page after a service (prototype).</p>
-      </div>
-      <div class="inline">
-        <span class="badge info">Total: ${st.reviews.length}</span>
-        <button class="btn" onclick="(${seedReview.toString()})()">Seed demo review</button>
+        <p>Customer feedback left after services.</p>
       </div>
     </div>
 
     <div class="card card-pad">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:900;">All reviews</div>
+          <div class="small" style="margin-top:6px;">Total: <b>${st.reviews.length}</b></div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
       ${recent.length === 0 ? `
-        <div class="small">No reviews yet. Open the public page and submit one.</div>
+        <div class="small">No reviews yet.</div>
       ` : `
         <table class="table">
           <thead>
@@ -1278,114 +1427,105 @@ function viewReviews(st) {
   `;
 }
 
-function seedReview() {
-  const ns = loadState();
-  const svc = ns.editor.services[0] || { name: "Service" };
-  ns.reviews.push({
-    id: uid("rev"),
-    customerName: "Demo Customer",
-    rating: 5,
-    text: "Really smooth booking experience. Loved how clear the times and pricing were.",
-    createdAt: nowISO(),
-    serviceName: svc.name
-  });
-  saveState(ns);
-  toast("Seeded", "Demo review added (prototype).");
-  render();
-}
-
 function viewChat(st) {
-  const threads = st.chats.slice().reverse();
+  const threads = st.chats.slice().sort((a,b)=>{
+    const atA = a.messages[a.messages.length-1]?.at || a.createdAt;
+    const atB = b.messages[b.messages.length-1]?.at || b.createdAt;
+    return (atB || "").localeCompare(atA || "");
+  });
+
+  const selectedId = st.ui.chatSelectedId || threads[0]?.id;
+  const selected = threads.find(t => t.id === selectedId) || threads[0];
+
+  const lastPreview = (t) => t.messages[t.messages.length-1]?.text || "";
+
   return `
     <div class="page-head">
       <div>
         <h2>Chat</h2>
-        <p>Customers can message you from your public booking page (prototype).</p>
-      </div>
-      <div class="inline">
-        <span class="badge info">Threads: ${threads.length}</span>
-        <button class="btn" onclick="(${seedChat.toString()})()">Seed demo chat</button>
+        <p>Your customer inbox. Click a message to open the conversation.</p>
       </div>
     </div>
 
-    <div class="card card-pad">
-      ${threads.length === 0 ? `
-        <div class="small">No chat threads yet. Open the public page and send a message.</div>
-      ` : `
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th>Last message</th>
-              <th>Updated</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${threads.map(t => {
-              const last = t.messages[t.messages.length - 1];
-              return `
-                <tr>
-                  <td>
-                    <div style="font-weight:800;">${h(t.customerName)}</div>
-                    <div class="small">${h(t.customerEmail)}</div>
-                  </td>
-                  <td style="max-width: 520px;">${h(last?.text || "—")}</td>
-                  <td>${h(fmtDateTime(last?.at || t.createdAt || nowISO()))}</td>
-                  <td style="text-align:right;">
-                    <button class="btn" data-open-chat="${h(t.id)}">Open</button>
-                  </td>
-                </tr>
-              `;
-            }).join("")}
-          </tbody>
-        </table>
-      `}
+    <div class="inbox">
+      <div class="inbox-list">
+        <div class="inbox-list-head">
+          <div style="font-weight:900;">Inbox</div>
+          <span class="pill">${threads.length} messages</span>
+        </div>
+
+        ${threads.map(t => {
+          const lastAt = t.messages[t.messages.length-1]?.at || t.createdAt;
+          const active = t.id === selected?.id;
+          const from = t.customerName || "Message";
+          const subject = t.subject || "Message";
+          return `
+            <div class="inbox-item ${active ? "active" : ""}" data-chat-select="${h(t.id)}">
+              <div class="top">
+                <div class="from">${h(from)}</div>
+                <div class="small">${h(fmtTime(lastAt))}</div>
+              </div>
+              <div class="small" style="margin-top:2px; font-weight:800; color: var(--text);">${h(subject)}</div>
+              <div class="sub">${h(lastPreview(t))}</div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+
+      <div class="inbox-view">
+        ${!selected ? `
+          <div class="small">Select a message to view it.</div>
+        ` : `
+          <div class="thread-head">
+            <div class="title">${h(selected.subject || "Conversation")}</div>
+            <div class="meta">
+              ${selected.customerEmail ? `From: ${h(selected.customerName)} · ${h(selected.customerEmail)}` : "Information"}
+            </div>
+          </div>
+
+          <div class="thread-messages">
+            ${selected.messages.map(m => `
+              <div class="msg">
+                <div class="who">
+                  ${m.from === "owner" ? "You" : (m.from === "system" ? "System" : h(selected.customerName))} · ${h(fmtDateTime(m.at))}
+                </div>
+                <div class="text">${h(m.text)}</div>
+              </div>
+            `).join("")}
+          </div>
+
+          <div class="reply-box">
+            <textarea id="replyText" placeholder="${selected.locked ? "Replies are disabled for this message." : "Write a reply..."}" ${selected.locked ? "disabled" : ""}></textarea>
+            <div class="reply-actions">
+              <button class="btn btn-primary" id="sendReplyBtn" ${selected.locked ? "disabled" : ""}>Send</button>
+            </div>
+          </div>
+        `}
+      </div>
     </div>
   `;
-}
-
-function seedChat() {
-  const ns = loadState();
-  ns.chats.push({
-    id: uid("chat"),
-    customerName: "Jamie",
-    customerEmail: "jamie@example.com",
-    createdAt: nowISO(),
-    messages: [
-      { from: "customer", text: "Hi! Do you have anything earlier than 10am on Friday?", at: nowISO() }
-    ]
-  });
-  saveState(ns);
-  toast("Seeded", "Demo chat thread added (prototype).");
-  render();
 }
 
 /* ---------- PUBLIC CUSTOMER PAGE ---------- */
 function renderPublicPage(st) {
   const slug = getPublicSlugFromURL();
-  const matches = st.editor.publicSlug && slug && st.editor.publicSlug === slug;
+  const ok = st.editor.publicSlug && slug && st.editor.publicSlug === slug && st.editor.published;
 
-  // If not published / slug mismatch, show graceful “not found”
-  if (!matches || !st.editor.published) {
+  if (!ok) {
     appRoot.innerHTML = `
       <div class="public-shell">
-        <header class="public-hero">
+        <div class="public-banner" style="--brand:${h(st.editor.brandColor||"#111827")}; background:${h(st.editor.brandColor||"#111827")}">
           <div class="container">
             <div class="public-title">
-              <div>
-                <h1>Booking page not found</h1>
-                <p>This link is a prototype link. Make sure the page is created and published in the owner dashboard.</p>
-              </div>
-              <a class="btn" href="${h(location.pathname)}">Go to owner app</a>
+              <h1>Booking page</h1>
+              <p>This booking link isn’t live yet.</p>
             </div>
           </div>
-        </header>
-
-        <div class="container" style="padding: 18px 0 48px;">
+        </div>
+        <div class="container" style="padding:18px 0 48px;">
           <div class="card card-pad">
             <div class="small">
-              Tip: open the owner app → Page editor → Create page → Publish → Open public page.
+              Go back to the dashboard → Page editor → Create page → Publish changes.
             </div>
           </div>
         </div>
@@ -1394,55 +1534,45 @@ function renderPublicPage(st) {
     return;
   }
 
-  // Apply branding to public page
   const brand = st.editor.brandColor || "#111827";
   const accent = st.editor.accentColor || "#2563eb";
 
-  // Build availability
+  // public UI cache in localStorage too (so it feels stable across refresh)
+  const pubKey = "booking_public_ui_v2_" + slug;
+  const publicUI = safeJSONParse(localStorage.getItem(pubKey) || "{}", {});
   const today = startOfDay(new Date());
   const weekStart = startOfDay(addDays(today, 0));
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  // booking UI state (in-memory only)
-  const publicUI = safeJSONParse(sessionStorage.getItem("booking_public_ui") || "{}", {});
   const selectedDayISO = publicUI.selectedDayISO || toISODate(today);
   const selectedServiceId = publicUI.selectedServiceId || (st.editor.services[0]?.id || "");
   const selectedTime = publicUI.selectedTime || "";
 
   const selectedService = st.editor.services.find(s => s.id === selectedServiceId) || st.editor.services[0];
-
-  const isDayOff = (isoDate) => st.bookings.daysOff.some(d => d.date === isoDate);
-
   const slots = buildSlots(st.bookings.workingHours.start, st.bookings.workingHours.end, st.bookings.workingHours.intervalMins);
 
+  const isDayOff = (isoDate) => isDateInOffRanges(st, isoDate);
+
   appRoot.innerHTML = `
-    <div class="public-shell" style="--brand:${h(brand)}; --accent:${h(accent)};">
-      <header class="public-hero">
+    <div class="public-shell">
+      <div class="public-banner" style="background:${h(brand)};">
         <div class="container">
           <div class="public-title">
-            <div>
-              <h1 style="color:${h(brand)}">${h(st.editor.pageTitle)}</h1>
-              <p>${h(st.editor.pageDescription)}</p>
-              <div class="inline" style="margin-top: 12px;">
-                <span class="badge info">Secure checkout (prototype)</span>
-                <span class="badge info">Account required (prototype)</span>
-              </div>
-            </div>
-            <div class="inline">
-              <button class="btn" id="publicChatBtn" style="border-color:${h(accent)}; color:${h(accent)};">Chat</button>
-              <button class="btn" id="publicReviewBtn" style="border-color:${h(accent)}; color:${h(accent)};">Leave a review</button>
+            <h1>${h(st.editor.pageTitle)}</h1>
+            <p>${h(st.editor.pageDescription)}</p>
+            <div class="public-actions">
+              <button class="btn" id="publicChatBtn">Chat</button>
+              <button class="btn" id="publicReviewBtn">Leave a review</button>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       <div class="container public-grid">
         <section class="calendar">
           <div class="calendar-head">
             <div style="font-weight:900; letter-spacing:-0.01em;">Select a day</div>
-            <div class="cal-nav">
-              <span class="pill">This week</span>
-            </div>
+            <span class="pill">This week</span>
           </div>
 
           <div class="calendar-body">
@@ -1452,7 +1582,8 @@ function renderPublicPage(st) {
                 const off = isDayOff(iso);
                 const isSelected = iso === selectedDayISO;
                 return `
-                  <div class="day ${off ? "disabled" : ""}" data-day="${h(iso)}" style="${isSelected ? `border-color:${h(accent)}; box-shadow: 0 0 0 3px rgba(37,99,235,0.10);` : ""}">
+                  <div class="day ${off ? "disabled" : ""}" data-day="${h(iso)}"
+                    style="${isSelected ? `border-color:${h(accent)}; box-shadow: 0 0 0 3px ${h(accent)}1a;` : ""}">
                     <div class="d-top">
                       <div class="d-name">${h(dayName(d))}</div>
                       <div class="d-date">${h(shortDate(d))}</div>
@@ -1468,9 +1599,9 @@ function renderPublicPage(st) {
             <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
               <div>
                 <div style="font-weight:900;">Select a service</div>
-                <div class="small">Services and paywalls come from the owner setup.</div>
+                <div class="small">Choose what you want to book.</div>
               </div>
-              <div style="min-width: 260px;">
+              <div style="min-width: 280px;">
                 <select id="publicServiceSelect" class="select" style="width:100%;">
                   ${st.editor.services.map(s => `
                     <option value="${h(s.id)}" ${s.id === selectedServiceId ? "selected" : ""}>
@@ -1484,7 +1615,7 @@ function renderPublicPage(st) {
             <div class="hr"></div>
 
             <div style="font-weight:900;">Select a time</div>
-            <div class="small" style="margin-top:6px;">Booked slots are shown as unavailable (prototype).</div>
+            <div class="small" style="margin-top:6px;">Booked slots are unavailable.</div>
 
             <div class="slot-grid">
               ${slots.map(t => {
@@ -1493,7 +1624,7 @@ function renderPublicPage(st) {
                 return `
                   <button class="slot ${booked ? "booked" : ""} ${selected ? "selected" : ""}"
                     data-time="${h(t)}" ${booked ? "disabled" : ""}
-                    style="${selected ? `border-color:${h(accent)}; background: rgba(37,99,235,0.10);` : ""}">
+                    style="${selected ? `border-color:${h(accent)}; background:${h(accent)}1a;` : ""}">
                     ${h(t)}
                   </button>
                 `;
@@ -1526,7 +1657,7 @@ function renderPublicPage(st) {
               <div style="font-weight:900;">Total</div>
               <div class="small">${selectedService?.paywalled ? "Payment required" : "No payment required"}</div>
             </div>
-            <div style="font-weight:900; color:${h(brand)};">
+            <div style="font-weight:900;">
               ${selectedService?.paywalled ? `£${Number(selectedService.price||0).toFixed(2)}` : "£0.00"}
             </div>
           </div>
@@ -1534,27 +1665,26 @@ function renderPublicPage(st) {
           <div class="hr"></div>
 
           <button class="btn btn-primary" id="publicBookBtn"
-            style="width:100%; background:${h(brand)}; border-color:${h(brand)};"
+            style="width:100%; background:${h(accent)}; border-color:${h(accent)};"
             ${(!selectedService || !selectedTime || isDayOff(selectedDayISO)) ? "disabled" : ""}>
             ${selectedService?.paywalled ? "Continue to pay" : "Book now"}
           </button>
 
           <div class="small" style="margin-top:10px;">
-            You’ll be asked to create an account (prototype) and receive a confirmation email/text (fake).
+            You’ll be asked to create an account and receive confirmation.
           </div>
         </aside>
       </div>
     </div>
   `;
 
-  // wire public interactions
   document.querySelectorAll("[data-day]").forEach(el => {
     el.onclick = () => {
       const iso = el.dataset.day;
       if (isDayOff(iso)) return;
       publicUI.selectedDayISO = iso;
       publicUI.selectedTime = "";
-      sessionStorage.setItem("booking_public_ui", JSON.stringify(publicUI));
+      localStorage.setItem(pubKey, JSON.stringify(publicUI));
       render();
     };
   });
@@ -1563,14 +1693,14 @@ function renderPublicPage(st) {
     el.onclick = () => {
       const time = el.dataset.time;
       publicUI.selectedTime = time;
-      sessionStorage.setItem("booking_public_ui", JSON.stringify(publicUI));
+      localStorage.setItem(pubKey, JSON.stringify(publicUI));
       render();
     };
   });
 
   document.getElementById("publicServiceSelect").onchange = (e) => {
     publicUI.selectedServiceId = e.target.value;
-    sessionStorage.setItem("booking_public_ui", JSON.stringify(publicUI));
+    localStorage.setItem(pubKey, JSON.stringify(publicUI));
     render();
   };
 
@@ -1579,25 +1709,23 @@ function renderPublicPage(st) {
     const service = ns.editor.services.find(s => s.id === selectedServiceId);
     if (!service) return;
 
-    if (isDayOff(selectedDayISO)) return toast("Unavailable", "That day is marked as unavailable.");
+    if (isDayOff(selectedDayISO)) return toast("Unavailable", "That day is unavailable.");
     if (isSlotBooked(ns, selectedDayISO, selectedTime)) return toast("Slot taken", "That time is already booked.");
 
-    // account gate
     openCustomerAccountModal({
       onContinue: (customer) => {
-        // paywall if required
         if (service.paywalled) {
-          openFakeCheckoutModal({
+          openCheckoutModal({
             amount: Number(service.price || 0),
             onPaid: () => {
               createBooking(ns, { service, selectedDayISO, selectedTime, customer, paid: true });
-              toast("Confirmed", "Payment accepted (prototype). Booking confirmed + notification sent.");
+              toast("Confirmed", "Booking confirmed and payment completed.");
               render();
             }
           });
         } else {
           createBooking(ns, { service, selectedDayISO, selectedTime, customer, paid: false });
-          toast("Booked", "Booking confirmed (prototype). Confirmation sent.");
+          toast("Booked", "Booking confirmed.");
           render();
         }
       }
@@ -1611,8 +1739,8 @@ function renderPublicPage(st) {
 /* ---------- PUBLIC MODALS ---------- */
 function openCustomerAccountModal({ onContinue }) {
   openModal({
-    title: "Create account to continue",
-    description: "Prototype account setup required to book or pay.",
+    title: "Create an account",
+    description: "You’ll use this to manage your booking and confirmations.",
     bodyHTML: `
       <div class="grid-2">
         <div class="field">
@@ -1630,11 +1758,10 @@ function openCustomerAccountModal({ onContinue }) {
           <input id="custPhone" class="input" placeholder="+44..." value="+44 7700 900123"/>
         </div>
         <div class="field">
-          <div class="label">Password (fake)</div>
+          <div class="label">Password</div>
           <input class="input" value="demo-password"/>
         </div>
       </div>
-      <div class="small">This does not create a real account. It only simulates the flow.</div>
     `,
     secondaryText: "Cancel",
     onSecondary: (close)=>close(),
@@ -1651,17 +1778,17 @@ function openCustomerAccountModal({ onContinue }) {
   });
 }
 
-function openFakeCheckoutModal({ amount, onPaid }) {
+function openCheckoutModal({ amount, onPaid }) {
   openModal({
     title: "Checkout",
-    description: "Prototype payment paywall — looks real, does nothing real.",
+    description: "Complete payment to confirm your booking.",
     bodyHTML: `
       <div class="field">
         <div class="label">Amount</div>
         <div class="input"><b>£${Number(amount||0).toFixed(2)}</b></div>
       </div>
       <div class="field">
-        <div class="label">Card (fake)</div>
+        <div class="label">Card</div>
         <input class="input" value="4242 4242 4242 4242"/>
         <div class="inline">
           <input class="input" style="width:120px" value="12/29"/>
@@ -1669,25 +1796,23 @@ function openFakeCheckoutModal({ amount, onPaid }) {
           <input class="input" style="flex:1" value="Alex Customer"/>
         </div>
       </div>
-      <div class="small">No real charge. Clicking “Pay” confirms in the prototype.</div>
     `,
     secondaryText: "Back",
     onSecondary: (close)=>close(),
+    tertiary: {
+      text: "Apple Pay",
+      onClick: (close) => { close(); onPaid(); }
+    },
     primaryText: "Pay",
-    onPrimary: (close) => {
-      close();
-      onPaid();
-    }
+    onPrimary: (close) => { close(); onPaid(); }
   });
 }
 
 function openReviewModal() {
   const ns = loadState();
-  const svc = ns.editor.services[0];
-
   openModal({
     title: "Leave a review",
-    description: "Prototype review submission. Appears in the owner Reviews tab.",
+    description: "Share your experience.",
     bodyHTML: `
       <div class="grid-2">
         <div class="field">
@@ -1707,9 +1832,8 @@ function openReviewModal() {
       </div>
       <div class="field">
         <div class="label">Review</div>
-        <textarea id="revText" class="textarea" placeholder="Write your feedback...">Super easy to book, clear times and prices.</textarea>
+        <textarea id="revText" class="textarea" placeholder="Write your feedback...">Super easy to book.</textarea>
       </div>
-      <div class="small">This is a simulated workflow — no moderation, no backend.</div>
     `,
     secondaryText: "Cancel",
     onSecondary: (close)=>close(),
@@ -1722,19 +1846,19 @@ function openReviewModal() {
         rating: Number(document.getElementById("revRating").value || 5),
         text: (document.getElementById("revText").value || "").trim(),
         createdAt: nowISO(),
-        serviceName: svc?.name || "Service"
+        serviceName: ns2.editor.services[0]?.name || "Service"
       });
       saveState(ns2);
       close();
-      toast("Thanks!", "Review submitted (prototype).");
+      toast("Thanks", "Your review has been submitted.");
     }
   });
 }
 
 function openPublicChatModal() {
   openModal({
-    title: "Message the business",
-    description: "Prototype chat. Messages appear in owner Chat tab.",
+    title: "Send a message",
+    description: "Your message will go to the business inbox.",
     bodyHTML: `
       <div class="grid-2">
         <div class="field">
@@ -1750,7 +1874,6 @@ function openPublicChatModal() {
         <div class="label">Message</div>
         <textarea id="chatText" class="textarea" placeholder="Type your question...">Hi, do you have anything later in the day?</textarea>
       </div>
-      <div class="small">No real delivery — only stored in session cache.</div>
     `,
     secondaryText: "Cancel",
     onSecondary: (close)=>close(),
@@ -1759,26 +1882,29 @@ function openPublicChatModal() {
       const name = (document.getElementById("chatName").value || "").trim() || "Customer";
       const email = (document.getElementById("chatEmail").value || "").trim() || "customer@example.com";
       const text = (document.getElementById("chatText").value || "").trim();
-      if (!text) return toast("Empty message", "Type a message first.");
+      if (!text) return toast("Empty", "Write a message first.");
 
       const ns = loadState();
       let thread = ns.chats.find(c => c.customerEmail === email);
       if (!thread) {
         thread = {
           id: uid("chat"),
+          locked: false,
           customerName: name,
           customerEmail: email,
           createdAt: nowISO(),
+          subject: "New message",
           messages: []
         };
         ns.chats.push(thread);
       }
       thread.customerName = name;
+      thread.subject = "New message";
       thread.messages.push({ from: "customer", text, at: nowISO() });
 
       saveState(ns);
       close();
-      toast("Sent", "Message sent (prototype).");
+      toast("Sent", "Your message has been sent.");
     }
   });
 }
@@ -1805,29 +1931,32 @@ function createBooking(ns, { service, selectedDayISO, selectedTime, customer, pa
   ns.bookings.items.push(booking);
   saveState(ns);
 
-  // simulate notifications
+  // Simulate confirmation
   const notifyEmail = ns.bookings.notifyByEmail;
   const notifyText = ns.bookings.notifyByText;
   if (notifyEmail || notifyText) {
-    toast(
-      "Owner notified",
-      `${notifyEmail ? "Email" : ""}${notifyEmail && notifyText ? " + " : ""}${notifyText ? "Text" : ""} alert sent (prototype).`
-    );
+    toast("Confirmation sent", `${notifyEmail ? "Email" : ""}${notifyEmail && notifyText ? " + " : ""}${notifyText ? "Text" : ""}`);
   }
 }
 
-/* ---------- HELPERS: CALENDAR / SLOTS ---------- */
+/* ---------- HELPERS: OFF RANGES ---------- */
+function isDateInOffRanges(st, isoDate) {
+  return st.bookings.daysOffRanges.some(r => {
+    const s = r.startDate;
+    const e = r.endDate || r.startDate;
+    return isoDate >= s && isoDate <= e;
+  });
+}
+
+/* ---------- HELPERS: SLOTS / BOOKINGS ---------- */
 function buildSlots(startHHMM, endHHMM, intervalMins) {
   const [sh, sm] = startHHMM.split(":").map(Number);
   const [eh, em] = endHHMM.split(":").map(Number);
-
   const start = sh * 60 + sm;
   const end = eh * 60 + em;
 
   const out = [];
-  for (let m = start; m < end; m += intervalMins) {
-    out.push(minutesToHHMM(m));
-  }
+  for (let m = start; m < end; m += intervalMins) out.push(minutesToHHMM(m));
   return out;
 }
 
@@ -1841,57 +1970,15 @@ function isSlotBooked(st, isoDate, time) {
   return st.bookings.items.some(b => b.dateISO === isoDate && b.time === time && b.status !== "cancelled");
 }
 
-/* ---------- HELPERS: FORMAT / DATES ---------- */
-function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0,0,0,0);
-  return x;
-}
-function addDays(d, n) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
-}
-function toISODate(d) {
-  const x = new Date(d);
-  const yyyy = x.getFullYear();
-  const mm = String(x.getMonth()+1).padStart(2,"0");
-  const dd = String(x.getDate()).padStart(2,"0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-function dayName(d) {
-  return d.toLocaleDateString(undefined, { weekday: "short" });
-}
-function shortDate(d) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-function fmtDate(isoDate) {
-  try {
-    const d = new Date(isoDate + "T00:00:00");
-    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
-  } catch { return isoDate; }
-}
-function fmtDateTime(iso) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, { year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" });
-  } catch { return iso; }
-}
-function fmtTime(iso) {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
-  } catch { return ""; }
-}
-
-function getUpcomingBookings(st) {
+function splitBookings(st) {
   const today = toISODate(new Date());
-  return st.bookings.items
+  const upcoming = st.bookings.items
     .filter(b => (b.dateISO || "") >= today)
-    .sort((a,b) => (a.dateISO + a.time).localeCompare(b.dateISO + b.time));
-}
-function countUpcoming(st) {
-  return getUpcomingBookings(st).filter(b => b.status !== "cancelled").length;
+    .sort((a,b)=> (a.dateISO + a.time).localeCompare(b.dateISO + b.time));
+  const previous = st.bookings.items
+    .filter(b => (b.dateISO || "") < today)
+    .sort((a,b)=> (b.dateISO + b.time).localeCompare(a.dateISO + a.time));
+  return { upcoming, previous };
 }
 
 /* ---------- FINANCE HELPERS + CHART ---------- */
@@ -1920,7 +2007,6 @@ function drawIncomeChartIfPresent() {
   const ctx = canvas.getContext("2d");
   const st = loadState();
 
-  // build last 12 "days" buckets
   const days = [];
   const today = startOfDay(new Date());
   for (let i = 11; i >= 0; i--) {
@@ -1935,7 +2021,6 @@ function drawIncomeChartIfPresent() {
     if (bucket) bucket.value += Number(b.paidAmount || b.price || 0);
   }
 
-  // clear
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const padding = { l: 44, r: 16, t: 16, b: 34 };
@@ -1943,7 +2028,6 @@ function drawIncomeChartIfPresent() {
   const plotW = W - padding.l - padding.r;
   const plotH = H - padding.t - padding.b;
 
-  // axis
   ctx.strokeStyle = "#e6e8eb";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1955,7 +2039,6 @@ function drawIncomeChartIfPresent() {
   const max = Math.max(10, ...days.map(d => d.value));
   const stepX = plotW / (days.length - 1);
 
-  // line
   ctx.strokeStyle = "#111827";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -1967,7 +2050,6 @@ function drawIncomeChartIfPresent() {
   });
   ctx.stroke();
 
-  // dots
   ctx.fillStyle = "#111827";
   days.forEach((d, i) => {
     const x = padding.l + stepX * i;
@@ -1977,7 +2059,6 @@ function drawIncomeChartIfPresent() {
     ctx.fill();
   });
 
-  // labels
   ctx.fillStyle = "#4b5563";
   ctx.font = "12px Inter, system-ui, sans-serif";
   ctx.textAlign = "right";
@@ -1993,12 +2074,40 @@ function drawIncomeChartIfPresent() {
   });
 }
 
-/* ---------- POST-RENDER HOOK ---------- */
-const _render = render;
-render = function() {
-  _render();
-  // after render, draw chart if finance tab visible
-  drawIncomeChartIfPresent();
-};
+/* ---------- DATE HELPERS ---------- */
+function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+
+function toISODate(d) {
+  const x = new Date(d);
+  const yyyy = x.getFullYear();
+  const mm = String(x.getMonth()+1).padStart(2,"0");
+  const dd = String(x.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dayName(d) { return d.toLocaleDateString(undefined, { weekday: "short" }); }
+function shortDate(d) { return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+
+function fmtDate(isoDate) {
+  try {
+    const d = new Date(isoDate + "T00:00:00");
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  } catch { return isoDate; }
+}
+
+function fmtDateTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { year:"numeric", month:"short", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+  } catch { return iso; }
+}
+
+function fmtTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
+  } catch { return ""; }
+}
 
 render();
