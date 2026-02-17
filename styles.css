@@ -106,12 +106,18 @@ button, input, select, textarea{ font-family: var(--font); }
 }
 .btn-danger:hover{ filter: brightness(0.95); }
 
+/* ✅ FIX: Apple Pay button matches normal buttons (no black/white inversion on hover) */
 .btn-applepay{
-  background: #000;
-  color:#fff;
-  border-color:#000;
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
 }
-.btn-applepay:hover{ filter: brightness(0.92); }
+.btn-applepay:hover{
+  background: #fbfbfc;
+  color: var(--text);
+  border-color: var(--border);
+  filter: none;
+}
 
 .pill{
   font-size:12px;
