@@ -123,9 +123,7 @@ button, input, select, textarea{ font-family: var(--font); }
   font-weight:600;
 }
 
-.hero{
-  padding: 44px 0 18px;
-}
+.hero{ padding: 44px 0 18px; }
 .h1{
   font-size: 40px;
   line-height: 1.1;
@@ -173,9 +171,7 @@ button, input, select, textarea{ font-family: var(--font); }
 }
 
 /* Testimonials */
-.testimonials{
-  padding: 18px 0 24px;
-}
+.testimonials{ padding: 18px 0 24px; }
 .test-grid{
   display:grid;
   grid-template-columns: repeat(3, 1fr);
@@ -190,37 +186,19 @@ button, input, select, textarea{ font-family: var(--font); }
   background:#fff;
   padding: 14px;
 }
-.test-top{
-  display:flex;
-  gap:10px;
-  align-items:center;
-}
+.test-top{ display:flex; gap:10px; align-items:center; }
 .avatar{
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   border-radius: 999px;
-  display:grid;
-  place-items:center;
+  display:grid; place-items:center;
   border: 1px solid var(--border);
   background: var(--muted);
   font-weight: 900;
   letter-spacing:-0.02em;
 }
-.test-name{
-  font-weight: 900;
-  letter-spacing:-0.01em;
-}
-.test-role{
-  margin-top:2px;
-  font-size: 12px;
-  color: var(--subtext);
-}
-.test-quote{
-  margin-top:10px;
-  color: var(--subtext);
-  line-height:1.55;
-  font-size: 14px;
-}
+.test-name{ font-weight: 900; letter-spacing:-0.01em; }
+.test-role{ margin-top:2px; font-size: 12px; color: var(--subtext); }
+.test-quote{ margin-top:10px; color: var(--subtext); line-height:1.55; font-size: 14px; }
 
 /* Footer */
 .site-footer{
@@ -349,10 +327,7 @@ button, input, select, textarea{ font-family: var(--font); }
 }
 
 /* Custom select */
-.select-wrap{
-  position: relative;
-  width: 100%;
-}
+.select-wrap{ position: relative; width: 100%; }
 .select{
   appearance:none;
   -webkit-appearance:none;
@@ -377,12 +352,8 @@ button, input, select, textarea{ font-family: var(--font); }
   font-size: 14px;
 }
 
-/* Radio group (neater) */
-.radio-row{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-}
+/* Radio group */
+.radio-row{ display:flex; gap:10px; flex-wrap:wrap; }
 .radio-pill{
   display:flex;
   align-items:center;
@@ -475,17 +446,8 @@ button, input, select, textarea{ font-family: var(--font); }
   justify-content:space-between;
   gap: 10px;
 }
-.modal-head h3{
-  margin:0;
-  font-size: 16px;
-  letter-spacing:-0.01em;
-}
-.modal-head p{
-  margin:6px 0 0;
-  color: var(--subtext);
-  font-size: 13px;
-  line-height:1.5;
-}
+.modal-head h3{ margin:0; font-size: 16px; letter-spacing:-0.01em; }
+.modal-head p{ margin:6px 0 0; color: var(--subtext); font-size: 13px; line-height:1.5; }
 .modal-body{ padding: 14px 16px; }
 .modal-foot{
   padding: 12px 16px 16px;
@@ -576,6 +538,7 @@ button, input, select, textarea{ font-family: var(--font); }
   .public-grid{ grid-template-columns: 1fr; }
 }
 
+/* Calendar */
 .calendar{
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -607,27 +570,37 @@ button, input, select, textarea{ font-family: var(--font); }
 .cal-arrow:hover{ background: #fbfbfc; }
 .calendar-body{
   padding: 12px;
-  padding-right: 14px; /* FIX: prevents the 7th day clipping */
+  overflow: hidden; /* prevents edge clipping visuals when animating */
 }
 
+/* ✅ FIX: Ensure 7 columns never cut off */
 .week-grid{
+  width: 100%;
   display:grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr)); /* FIX: ensures 7 columns always fit cleanly */
+  grid-template-columns: repeat(7, minmax(0, 1fr)); /* key fix */
   gap: 10px;
   will-change: transform;
 }
 
-/* Week slide animation */
-.week-grid.anim-next{ animation: weekSlideNext .24s ease; }
-.week-grid.anim-prev{ animation: weekSlidePrev .24s ease; }
-
-@keyframes weekSlideNext{
-  from{ transform: translateX(18px); opacity: .65; }
-  to{ transform: translateX(0); opacity: 1; }
+/* Slide animations (week change) */
+@keyframes slideInFromRight {
+  from { transform: translateX(28px); opacity: 0.98; }
+  to   { transform: translateX(0); opacity: 1; }
 }
-@keyframes weekSlidePrev{
-  from{ transform: translateX(-18px); opacity: .65; }
-  to{ transform: translateX(0); opacity: 1; }
+@keyframes slideInFromLeft {
+  from { transform: translateX(-28px); opacity: 0.98; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.week-grid.slide-in-right{ animation: slideInFromRight 220ms ease; }
+.week-grid.slide-in-left{ animation: slideInFromLeft 220ms ease; }
+
+/* tighter layout on small screens to keep 7 fully visible */
+@media (max-width: 520px){
+  .calendar-body{ padding: 10px; }
+  .week-grid{ gap: 8px; }
+  .day{ padding: 8px; min-height: 86px; }
+  .day .d-top{ margin-bottom: 8px; }
+  .day .d-name, .day .d-date{ font-size: 11px; }
 }
 
 .day{
@@ -637,6 +610,7 @@ button, input, select, textarea{ font-family: var(--font); }
   min-height: 94px;
   background: #fff;
   cursor:pointer;
+  min-width: 0; /* prevents grid overflow in some browsers */
 }
 .day:hover{ background: #fbfbfc; }
 .day.disabled{
