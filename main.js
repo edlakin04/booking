@@ -71,6 +71,27 @@ function qs(){ return new URLSearchParams(window.location.search); }
 function isPublicView(){ return qs().get("public") === "1"; }
 function getPublicSlugFromURL(){ return qs().get("slug") || ""; }
 
+/* ✅ NEW: returns a guaranteed clean editor state (no services, no created/published, no slug) */
+function cleanEditorState(){
+  return {
+    pageTitle: "Bookings by Studio Nova",
+    pageDescription: "Choose a service, pick a time, and get a confirmation instantly.",
+    location: "London, UK",
+    brandColor: "#111827",
+    accentColor: "#2563eb",
+    services: [],
+    cancellationPolicy: { mode: "free", feeAmount: 0 },
+    published: false,
+    created: false,
+    publicSlug: ""
+  };
+}
+
+/* ✅ NEW: ensures owner always starts with a fully clean editor after trial/signup/login */
+function forceCleanOwnerEditor(ns){
+  ns.editor = cleanEditorState();
+}
+
 /* ---------- DEFAULT STATE ---------- */
 function defaultState(){
   const today = new Date();
@@ -365,6 +386,10 @@ function openTrialModal(){
       onClick: (close) => {
         const ns = loadState();
         ns.auth.trialAccepted = true;
+
+        /* ✅ FIX: always start with a clean editor (no services ever preload) */
+        forceCleanOwnerEditor(ns);
+
         saveState(ns);
         close();
         render();
@@ -374,6 +399,10 @@ function openTrialModal(){
     onPrimary: (close) => {
       const ns = loadState();
       ns.auth.trialAccepted = true;
+
+      /* ✅ FIX: always start with a clean editor (no services ever preload) */
+      forceCleanOwnerEditor(ns);
+
       saveState(ns);
       close();
       render();
@@ -405,6 +434,10 @@ function openOwnerLoginModal(){
       ns.auth.trialAccepted = true;
       ns.auth.signedIn = true;
       ns.auth.userEmail = email;
+
+      /* ✅ FIX: always start with a clean editor (no services ever preload) */
+      forceCleanOwnerEditor(ns);
+
       saveState(ns);
       close();
       render();
@@ -467,6 +500,10 @@ function renderSignup(st){
     const ns = loadState();
     ns.auth.signedIn = true;
     ns.auth.userEmail = email;
+
+    /* ✅ FIX: always start with a clean editor (no services ever preload) */
+    forceCleanOwnerEditor(ns);
+
     saveState(ns);
     toast("Welcome", "You're in.");
     render();
@@ -1597,6 +1634,13 @@ function renderPublicPage(st){
 
   const pubUIKey = `booking_public_ui_v3_${slug}`;
   const pubAuthKey = `booking_public_auth_v3_${slug}`;
+
+  /* ✅ FIX: always start logged out ON PAGE LOAD (once per tab load) */
+  const authClearFlag = `booking_public_auth_cleared_v3_${slug}`;
+  if (!sessionStorage.getItem(authClearFlag)) {
+    localStorage.setItem(pubAuthKey, JSON.stringify({ user: null }));
+    sessionStorage.setItem(authClearFlag, "1");
+  }
 
   const publicUI = safeJSONParse(localStorage.getItem(pubUIKey) || "{}", {});
   const publicAuth = safeJSONParse(localStorage.getItem(pubAuthKey) || "{}", { user: null });
