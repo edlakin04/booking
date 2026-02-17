@@ -605,13 +605,31 @@ button, input, select, textarea{ font-family: var(--font); }
   font-weight: 900;
 }
 .cal-arrow:hover{ background: #fbfbfc; }
-.calendar-body{ padding: 12px; }
+.calendar-body{
+  padding: 12px;
+  padding-right: 14px; /* FIX: prevents the 7th day clipping */
+}
 
 .week-grid{
   display:grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr)); /* FIX: ensures 7 columns always fit cleanly */
   gap: 10px;
+  will-change: transform;
 }
+
+/* Week slide animation */
+.week-grid.anim-next{ animation: weekSlideNext .24s ease; }
+.week-grid.anim-prev{ animation: weekSlidePrev .24s ease; }
+
+@keyframes weekSlideNext{
+  from{ transform: translateX(18px); opacity: .65; }
+  to{ transform: translateX(0); opacity: 1; }
+}
+@keyframes weekSlidePrev{
+  from{ transform: translateX(-18px); opacity: .65; }
+  to{ transform: translateX(0); opacity: 1; }
+}
+
 .day{
   border: 1px solid var(--border);
   border-radius: 12px;
